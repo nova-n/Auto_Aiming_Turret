@@ -18,7 +18,9 @@ if webCamCapture.isOpened():
     vidWidth = int(webCamCapture.get(3)) #will return a float without int()
     vidHeight = int(webCamCapture.get(4)) #will return a float without int()
     print("camera width = " + str(vidWidth) + " , camera height = " + str(vidHeight) )
-    res = "W{fW}H{fH}".format(fW=vidWidth,fH=vidHeight)
+    res = "Resolution: <X{fW}Y{fH}>".format(fW=vidWidth,fH=vidHeight)
+
+arduino.write(res.encode())
 
 centerCoord = [vidWidth/2,vidHeight/2]
 print("Center Coord: (" + str(centerCoord[0]) + "," + str(centerCoord[1]) +")")
