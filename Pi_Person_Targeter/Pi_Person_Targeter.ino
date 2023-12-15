@@ -1,5 +1,6 @@
 #include <AccelStepper.h>
 #include <elapsedMillis.h>
+#include <Servo.h> 
 
 //Serial stuff------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const byte numChars = 32; //assumes that serial buffer will give a max of 32 chars
@@ -34,7 +35,21 @@ AccelStepper vertStepper(AccelStepper::DRIVER, stepPinY, dirPinY);// works for a
 int desiredMoveVert;
 
 //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- 
+
+
+//Temporary Servo Stuff--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+int yServoPin = 9;
+Servo yServo;
+int desiredMoveYServo;
+//------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+//Mock Fire Stuff------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+int firePin = 7;
+int buzzerPin = 8; //passive buzzer
+//------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
 
 //Camera stuff------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 double cameraConeAngle = 66; //in degrees
@@ -44,7 +59,10 @@ int cameraResolution[2]; //width, height
 //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 void setup() {
-  pinMode(7,OUTPUT);
+  pinMode(firePin,OUTPUT);
+  pinMode(buzzerPin,OUTPUT);
+  digitalWrite(firePin,LOW);
+  digitalWrite(buzzerPin,LOW);
   //declaring within scope of setup, so they are not global
   //once setup is exited, these get deleted, and RAM is freed up
   //cannot delete global variables
@@ -52,14 +70,21 @@ void setup() {
   const int ledPin = 8;
   const int readyLedPin = 7;
 
+  yServo.write(180);
+  yServo.attach(yServoPin);
+
   float horizStepperGearReduction = 4;
   float horizTurretRatio = 3;
   finalHorizGearRatio = horizStepperGearReduction * horizTurretRatio;
-
+  horizStepper.setCurrentPosition(0);
+  vertStepper.setCurrentPosition(0);
   horizStepper.setMaxSpeed(1000.0);   // the motor accelerates to this speed exactly without overshoot. Try other values.
   horizStepper.setAcceleration(2500.0);   // try other acceleration rates.
+  vertStepper.setMaxSpeed(1000.0);   // the motor accelerates to this speed exactly without overshoot. Try other values.
+  vertStepper.setAcceleration(2500.0);   // try other acceleration rates.
   while(!Serial){
     //just wait for the port to be ready?
+    digitalWrite(buzzerPin,LOW);
     delay(100);//can actually leave blank, but is a better way to wait for the pi to connect
   }
   Serial.begin(9600);
@@ -110,6 +135,9 @@ void setup() {
   while(horizStepper.currentPosition() != -21){
     horizStepper.run(); //keeps the motor initialized before starting the main loop
   }
+  delay(100);
+  //yServo.write(90);
+  desiredMoveYServo = 90;
 }
 
 
@@ -125,7 +153,26 @@ void loop() {
     if(abs(coords[0]) < 5.00){
       coords[0] = 0.0; 
     }
-    desiredMoveHoriz = -1.00 * round( coords[0]/320.00 * actualSteps);
+    if(abs(coords[1]) < 5.00){
+      coords[1] = 0.0; 
+    }
+    if(coords[1] == NULL || isnan(coords[1]) == true){
+      //digitalWrite(7,HIGH);
+    }else{
+      //digitalWrite(7,LOW);
+      coords[1] = -1*coords[1];
+      desiredMoveYServo = map(coords[1] , -240 , 240 , 57 , 123);
+      if(coords[0] == 0.0 && abs(yServo.read() - desiredMoveYServo)<=10.0){
+        digitalWrite(firePin,HIGH);
+        digitalWrite(buzzerPin,HIGH);
+      }else{
+        digitalWrite(firePin,LOW);
+        digitalWrite(buzzerPin,LOW);
+      }
+    }
+    
+    desiredMoveHoriz = -1.00 * round( coords[0]/cameraResolution[0] * actualSteps);
+    desiredMoveVert = -1.00 * round( coords[1]/cameraResolution[1] * actualSteps);
     //Serial.println(desiredMoveHoriz);
   }
   if(abs(coords[0]) > 200){
@@ -141,13 +188,22 @@ void loop() {
   }else if(abs(coords[0]) <= 20){
     horizStepper.setMaxSpeed(5.0);
   }
+  
  
   //horizStepper.setMaxSpeed( ((800-80)/(320-50))*(coords[0]-50)+80 );
   //horizStepper.moveTo(-1*(round(desiredMoveHoriz/320) * 21));
   horizStepper.moveTo(desiredMoveHoriz*finalHorizGearRatio + x);
-  //if(abs(coords[0]) < 50){
+  vertStepper.moveTo(desiredMoveVert);
+  //if(abs(coords[0]) < 200){
     horizStepper.run(); // must be called continuously to make the motor run
   //}
+  //vertStepper.run();
+  if( yServo.read() < desiredMoveYServo){
+    yServo.write( yServo.read() + 1);
+  }else if( yServo.read() > desiredMoveYServo ){
+    yServo.write( yServo.read() - 1);
+  }
+  
 }
 
 void recvStartEndMarkers(bool initializing){
@@ -167,9 +223,9 @@ void recvStartEndMarkers(bool initializing){
     //tempChars[0] = '\n';
     //coordsReady = true;
     //return;
-    digitalWrite(7,HIGH);
+    //digitalWrite(7,HIGH);
   }else{
-    digitalWrite(7,LOW);
+    //digitalWrite(7,LOW);
   }
   while(Serial.available() >0){
     rc = Serial.read(); //picks up one at a time
